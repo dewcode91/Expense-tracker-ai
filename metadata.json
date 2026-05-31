@@ -1,0 +1,6 @@
+{
+  "name": "Expense Tracker",
+  "description": "A fully featured offline-first expense tracker containing an elegant analytics dashboard, custom Canvas data charts, and local CRUD persistence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
