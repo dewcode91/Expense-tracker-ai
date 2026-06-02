@@ -4,6 +4,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.ui.ExpenseApp
 import com.example.ui.ExpenseViewModel
@@ -14,8 +16,9 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            MyApplicationTheme {
-                val viewModel: ExpenseViewModel = viewModel()
+            val viewModel: ExpenseViewModel = viewModel()
+            val isDarkTheme by viewModel.isDarkTheme.collectAsState()
+            MyApplicationTheme(darkTheme = isDarkTheme) {
                 ExpenseApp(viewModel = viewModel)
             }
         }

@@ -24,4 +24,8 @@ class ExpenseRepository(private val expenseDao: ExpenseDao) {
     suspend fun getExpenseById(id: Int): Expense? {
         return expenseDao.getExpenseById(id)
     }
+
+    suspend fun updateExpenseCategory(oldCategory: String, newCategory: String) {
+        expenseDao.updateExpenseCategory(oldCategory, newCategory)
+    }
 }

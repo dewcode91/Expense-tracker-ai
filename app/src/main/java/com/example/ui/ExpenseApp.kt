@@ -1,8 +1,6 @@
 package com.example.ui
 
 import android.app.DatePickerDialog
-import androidx.compose.animation.*
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -16,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,6 +29,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
 import android.graphics.Typeface
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -48,7 +48,7 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpenseApp(viewModel: ExpenseViewModel) {
-    var selectedTab by remember { mutableStateOf(0) } // 0 = Expenses, 1 = Analytics
+    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Expenses, 1 = Analytics, 2 = Settings
     var showAddDialog by remember { mutableStateOf(false) }
     var showBudgetDialog by remember { mutableStateOf(false) }
     var expenseToEdit by remember { mutableStateOf<Expense?>(null) }
@@ -59,10 +59,13 @@ fun ExpenseApp(viewModel: ExpenseViewModel) {
     val selectedCategoryFilter by viewModel.selectedCategoryFilter.collectAsStateWithLifecycle()
     val monthlyBudget by viewModel.monthlyBudget.collectAsStateWithLifecycle()
 
+    val profileName by viewModel.profileName.collectAsStateWithLifecycle()
+    val profileAvatarColor by viewModel.profileAvatarColor.collectAsStateWithLifecycle()
+    val isDarkTheme by viewModel.isDarkTheme.collectAsStateWithLifecycle()
+    val categoriesList by viewModel.categories.collectAsStateWithLifecycle()
+
     val totalSpent = expenses.sumOf { it.amount }
     val budgetProgress = if (monthlyBudget > 0) (totalSpent / monthlyBudget).toFloat() else 0f
-
-    val context = LocalContext.current
 
     Scaffold(
         modifier = Modifier
@@ -72,7 +75,11 @@ fun ExpenseApp(viewModel: ExpenseViewModel) {
             TopAppBar(
                 title = {
                     Text(
-                        text = if (selectedTab == 0) "All Expenses" else "Analytics",
+                        text = when (selectedTab) {
+                            0 -> "All Expenses"
+                            1 -> "Analytics"
+                            else -> "Settings"
+                        },
                         fontWeight = FontWeight.ExtraBold,
                         style = MaterialTheme.typography.titleLarge
                     )
@@ -83,12 +90,12 @@ fun ExpenseApp(viewModel: ExpenseViewModel) {
                 ),
                 actions = {
                     IconButton(
-                        onClick = { showBudgetDialog = true },
+                        onClick = { selectedTab = 2 },
                         modifier = Modifier.testTag("budget_settings_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "Budget Settings",
+                            contentDescription = "Settings",
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
@@ -126,7 +133,7 @@ fun ExpenseApp(viewModel: ExpenseViewModel) {
                 NavigationBarItem(
                     selected = selectedTab == 0,
                     onClick = { selectedTab = 0 },
-                    icon = { Icon(Icons.Default.List, contentDescription = "Tracker") },
+                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Tracker") },
                     label = { Text("Tracker") },
                     modifier = Modifier.testTag("nav_tracker")
                 )
@@ -136,6 +143,13 @@ fun ExpenseApp(viewModel: ExpenseViewModel) {
                     icon = { Icon(Icons.Default.Star, contentDescription = "Analytics") },
                     label = { Text("Analytics") },
                     modifier = Modifier.testTag("nav_analytics")
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    icon = { Icon(Icons.Default.Settings, contentDescription = "Settings") },
+                    label = { Text("Settings") },
+                    modifier = Modifier.testTag("nav_settings")
                 )
             }
         },
@@ -160,7 +174,9 @@ fun ExpenseApp(viewModel: ExpenseViewModel) {
                         totalSpent = totalSpent,
                         monthlyBudget = monthlyBudget,
                         budgetProgress = budgetProgress,
-                        onSetBudget = { showBudgetDialog = true }
+                        onSetBudget = { showBudgetDialog = true },
+                        profileName = profileName,
+                        profileAvatarColor = profileAvatarColor
                     )
                 }
                 1 -> {
@@ -169,6 +185,23 @@ fun ExpenseApp(viewModel: ExpenseViewModel) {
                         monthlyBudget = monthlyBudget,
                         totalSpent = totalSpent,
                         budgetProgress = budgetProgress
+                    )
+                }
+                2 -> {
+                    SettingsScreen(
+                        viewModel = viewModel,
+                        profileName = profileName,
+                        profileAvatarColor = profileAvatarColor,
+                        isDarkTheme = isDarkTheme,
+                        categories = categoriesList,
+                        onSetTheme = { viewModel.setDarkTheme(it) },
+                        onSetProfile = { name, color -> 
+                            viewModel.setProfileName(name)
+                            viewModel.setProfileAvatarColor(color)
+                        },
+                        onAddCategory = { name, color, icon ->
+                            viewModel.addCategory(name, color, icon)
+                        }
                     )
                 }
             }
@@ -223,9 +256,11 @@ fun ExpensesTrackerScreen(
     totalSpent: Double,
     monthlyBudget: Double,
     budgetProgress: Float,
-    onSetBudget: () -> Unit
+    onSetBudget: () -> Unit,
+    profileName: String = "Alex Rivera",
+    profileAvatarColor: Long = 0xFFEADDFF
 ) {
-    val currencyFormat = NumberFormat.getCurrencyInstance(Locale.US)
+    val currencyFormat = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("en-IN"))
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -246,7 +281,7 @@ fun ExpensesTrackerScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    text = "Alex Rivera",
+                    text = profileName,
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onSurface
@@ -256,15 +291,15 @@ fun ExpensesTrackerScreen(
             Box(
                 modifier = Modifier
                     .size(48.dp)
-                    .background(MaterialTheme.colorScheme.primaryContainer, shape = CircleShape)
+                    .background(Color(profileAvatarColor), shape = CircleShape)
                     .border(2.dp, Color.White, CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = Icons.Default.Person,
-                    contentDescription = "User Profile",
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                    modifier = Modifier.size(24.dp)
+                Text(
+                    text = if (profileName.isNotEmpty()) profileName.take(1).uppercase() else "A",
+                    fontWeight = FontWeight.ExtraBold,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
         }
@@ -513,7 +548,7 @@ fun ExpenseCard(
     val categoryInfo = CategoryHelper.getCategory(expense.category)
     val formatter = SimpleDateFormat("dd MMM yyyy", Locale.getDefault())
     val formattedDate = formatter.format(Date(expense.date))
-    val currencyFormat = NumberFormat.getCurrencyInstance(Locale.US)
+    val currencyFormat = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("en-IN"))
 
     Card(
         modifier = Modifier
@@ -594,7 +629,7 @@ fun ExpenseCard(
                 )
             }
 
-            Divider(
+            HorizontalDivider(
                 modifier = Modifier.padding(vertical = 12.dp),
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
             )
@@ -650,7 +685,7 @@ fun AnalyticsDashboardScreen(
     totalSpent: Double,
     budgetProgress: Float
 ) {
-    val currencyFormat = NumberFormat.getCurrencyInstance(Locale.US)
+    val currencyFormat = NumberFormat.getCurrencyInstance(Locale.forLanguageTag("en-IN"))
 
     // Sort categories by descending total amount
     val categoryTotals = CategoryHelper.categories.map { cat ->
@@ -740,7 +775,7 @@ fun AnalyticsDashboardScreen(
                     Spacer(modifier = Modifier.height(10.dp))
 
                     LinearProgressIndicator(
-                        progress = budgetProgress.coerceAtMost(1f),
+                        progress = { budgetProgress.coerceAtMost(1f) },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(8.dp)
@@ -840,7 +875,7 @@ fun AnalyticsDashboardScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (catA != null) currencyFormat.format(catA.second) else "$0.00",
+                                text = if (catA != null) currencyFormat.format(catA.second) else currencyFormat.format(0.0),
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -890,7 +925,7 @@ fun AnalyticsDashboardScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = if (catB != null) currencyFormat.format(catB.second) else "$0.00",
+                                text = if (catB != null) currencyFormat.format(catB.second) else currencyFormat.format(0.0),
                                 style = MaterialTheme.typography.bodyLarge,
                                 fontWeight = FontWeight.ExtraBold,
                                 color = MaterialTheme.colorScheme.onSurface
@@ -1131,7 +1166,7 @@ fun AnalyticsDashboardScreen(
                                     }
                                     Spacer(modifier = Modifier.height(6.dp))
                                     LinearProgressIndicator(
-                                        progress = percentage,
+                                        progress = { percentage },
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(8.dp)
@@ -1157,10 +1192,13 @@ fun DonutChart(
 ) {
     Canvas(modifier = modifier) {
         val strokeWidth = 32.dp.toPx()
-        var startAngle = -90f
 
-        categoryTotals.forEach { (cat, amount) ->
+        categoryTotals.forEachIndexed { index, (cat, amount) ->
             val sweepAngle = ((amount / grandTotal) * 360f).toFloat()
+            val startAngle = -90f + categoryTotals.take(index).sumOf { (_, amt) ->
+                ((amt / grandTotal) * 360f)
+            }.toFloat()
+
             drawArc(
                 color = cat.color,
                 startAngle = startAngle,
@@ -1168,7 +1206,6 @@ fun DonutChart(
                 useCenter = false,
                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round)
             )
-            startAngle += sweepAngle
         }
     }
 }
@@ -1247,7 +1284,7 @@ fun WeeklyBarChart(
                     typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
                 }
                 drawContext.canvas.nativeCanvas.drawText(
-                    "$${stat.second.toInt()}",
+                    "₹${stat.second.toInt()}",
                     x,
                     topY - 10f,
                     valuePaint
@@ -1297,7 +1334,7 @@ fun BudgetDialog(
                         budgetInput = it
                         errorMsg = ""
                     },
-                    label = { Text("Budget Amount ($)") },
+                    label = { Text("Budget Amount (₹)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1349,7 +1386,7 @@ fun AddEditExpenseDialog(
     var title by remember { mutableStateOf(expense?.title ?: "") }
     var amountText by remember { mutableStateOf(expense?.amount?.toString() ?: "") }
     var category by remember { mutableStateOf(expense?.category ?: CategoryHelper.categories.first().name) }
-    var date by remember { mutableStateOf(expense?.date ?: System.currentTimeMillis()) }
+    var date by remember { mutableLongStateOf(expense?.date ?: System.currentTimeMillis()) }
     var description by remember { mutableStateOf(expense?.description ?: "") }
 
     var titleError by remember { mutableStateOf("") }
@@ -1430,7 +1467,7 @@ fun AddEditExpenseDialog(
                         amountText = it
                         amountError = ""
                     },
-                    label = { Text("Amount ($)") },
+                    label = { Text("Amount (₹)") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     isError = amountError.isNotEmpty(),
                     modifier = Modifier
@@ -1555,18 +1592,17 @@ fun AddEditExpenseDialog(
 
                     Button(
                         onClick = {
-                            var hasError = false
-                            if (title.isBlank()) {
+                            val isTitleBlank = title.isBlank()
+                            if (isTitleBlank) {
                                 titleError = "Description field cannot be empty"
-                                hasError = true
                             }
                             val parsedAmount = amountText.toDoubleOrNull()
-                            if (parsedAmount == null || parsedAmount <= 0) {
-                                amountError = "Please enter a valid amount > $0"
-                                hasError = true
+                            val isAmountInvalid = parsedAmount == null || parsedAmount <= 0
+                            if (isAmountInvalid) {
+                                amountError = "Please enter a valid amount > ₹0"
                             }
 
-                            if (!hasError) {
+                            if (!isTitleBlank && !isAmountInvalid) {
                                 onConfirm(title, parsedAmount!!, category, date, description)
                             }
                         },
@@ -1579,3 +1615,637 @@ fun AddEditExpenseDialog(
         }
     }
 }
+
+@Composable
+fun SettingsScreen(
+    viewModel: ExpenseViewModel,
+    profileName: String,
+    profileAvatarColor: Long,
+    isDarkTheme: Boolean,
+    categories: List<CategoryInfo>,
+    onSetTheme: (Boolean) -> Unit,
+    onSetProfile: (String, Long) -> Unit,
+    onAddCategory: (String, Color, ImageVector) -> Unit
+) {
+    var nameInput by remember { mutableStateOf(profileName) }
+    
+    // Choose dynamic avatar colors (hex values)
+    val avatarColors = remember {
+        listOf(
+            0xFFEADDFF, // Purple
+            0xFFF25C54, // Red
+            0xFF2A6F97, // Blue
+            0xFFFFD166, // Yellow
+            0xFF06D6A0, // Green
+            0xFFFF70A6, // Pink
+            0xFFE2711D  // Orange
+        )
+    }
+    
+    // Ensure the current user's profile color is mapped if possible
+    val currentAvatarIndex = remember(profileAvatarColor) {
+        val idx = avatarColors.indexOf(profileAvatarColor)
+        if (idx >= 0) idx else 0
+    }
+    var avatarColorIndex by remember { mutableIntStateOf(currentAvatarIndex) }
+
+    // State for Adding Category
+    var newCategoryName by remember { mutableStateOf("") }
+    var categoryColorIndex by remember { mutableIntStateOf(0) }
+    var categoryIconIndex by remember { mutableIntStateOf(0) }
+    var categoryError by remember { mutableStateOf("") }
+
+    // State for Editing Category
+    var editingCategory by remember { mutableStateOf<CategoryInfo?>(null) }
+
+    val categoryColors = remember {
+        listOf(
+            Color(0xFFF25C54), // Food/Red
+            Color(0xFF2A6F97), // Transport/Blue
+            Color(0xFFFFD166), // Utilities/Yellow
+            Color(0xFF9D4EDD), // Entertainment/Purple
+            Color(0xFF06D6A0), // Shopping/Green
+            Color(0xFF6C757D), // Others/Grey
+            Color(0xFFFF70A6), // Pink
+            Color(0xFFE2711D), // Orange
+            Color(0xFF4EA8DE)  // Light Blue
+        )
+    }
+
+    val categoryIcons = remember {
+        listOf(
+            Icons.Default.Favorite to "Favorite",
+            Icons.Default.ShoppingCart to "Shopping",
+            Icons.Default.Home to "Home",
+            Icons.Default.Star to "Star",
+            Icons.Default.Build to "Build",
+            Icons.Default.PlayArrow to "Play",
+            Icons.Default.Person to "Person",
+            Icons.Default.Call to "Phone",
+            Icons.Default.Settings to "Settings",
+            Icons.Default.Info to "Info"
+        )
+    }
+
+    if (editingCategory != null) {
+        val cat = editingCategory!!
+        var editName by remember(cat) { mutableStateOf(cat.name) }
+        var editColorIndex by remember(cat) { 
+            val idx = categoryColors.indexOfFirst { it.value == cat.color.value }
+            mutableIntStateOf(if (idx >= 0) idx else 0)
+        }
+        var editIconIndex by remember(cat) { 
+            val idx = categoryIcons.indexOfFirst { it.first == cat.icon }
+            mutableIntStateOf(if (idx >= 0) idx else 0)
+        }
+        var editError by remember { mutableStateOf("") }
+
+        AlertDialog(
+            onDismissRequest = { editingCategory = null },
+            title = { Text("Edit Category", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = editName,
+                        onValueChange = {
+                            editName = it
+                            editError = ""
+                        },
+                        label = { Text("Category Name") },
+                        singleLine = true,
+                        isError = editError.isNotEmpty(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("edit_category_name_input")
+                    )
+                    if (editError.isNotEmpty()) {
+                        Text(
+                            text = editError,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    // Color Picker
+                    Text(
+                        text = "Badge Color",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(categoryColors.size) { index ->
+                            val isSelected = index == editColorIndex
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(categoryColors[index], shape = CircleShape)
+                                    .border(
+                                        width = if (isSelected) 3.dp else 1.dp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.LightGray.copy(alpha = 0.5f),
+                                        shape = CircleShape
+                                    )
+                                    .clickable { editColorIndex = index }
+                            )
+                        }
+                    }
+
+                    // Icon Picker
+                    Text(
+                        text = "Badge Icon",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(categoryIcons.size) { index ->
+                            val isSelected = index == editIconIndex
+                            val iconPair = categoryIcons[index]
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(
+                                        if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .border(
+                                        width = if (isSelected) 2.dp else 0.dp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable { editIconIndex = index },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = iconPair.first,
+                                    contentDescription = iconPair.second,
+                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Delete Button
+                    TextButton(
+                        onClick = {
+                            viewModel.deleteCategory(cat)
+                            editingCategory = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        modifier = Modifier.testTag("delete_category_button")
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete", modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Delete")
+                    }
+
+                    Button(
+                        onClick = {
+                            val nameText = editName.trim()
+                            if (nameText.isBlank()) {
+                                editError = "Name cannot be empty"
+                            } else if (!nameText.equals(cat.name, ignoreCase = true) && 
+                                       categories.any { it.name.equals(nameText, ignoreCase = true) }) {
+                                editError = "Category already exists"
+                            } else {
+                                viewModel.updateCategory(
+                                    oldCat = cat,
+                                    newName = nameText,
+                                    newColor = categoryColors[editColorIndex],
+                                    newIcon = categoryIcons[editIconIndex].first
+                                )
+                                editingCategory = null
+                            }
+                        },
+                        modifier = Modifier.testTag("save_category_changes_button")
+                    ) {
+                        Text("Save")
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingCategory = null }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("settings_screen"),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp)
+    ) {
+        // Module 1: Profile Customizer Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                        shape = RoundedCornerShape(28.dp)
+                    ),
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        text = "MANAGE PROFILE",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Interactive Avatar Preview
+                        Box(
+                            modifier = Modifier
+                                .size(64.dp)
+                                .background(Color(avatarColors[avatarColorIndex]), shape = CircleShape)
+                                .border(3.dp, Color.White, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (nameInput.isNotEmpty()) nameInput.take(1).uppercase() else "A",
+                                style = MaterialTheme.typography.headlineMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.width(16.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            OutlinedTextField(
+                                value = nameInput,
+                                onValueChange = { nameInput = it },
+                                label = { Text("Your Name") },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("profile_name_input")
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Avatar Color Selector Row
+                    Text(
+                        text = "Avatar Theme Color",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(avatarColors.size) { index ->
+                            val isSelected = index == avatarColorIndex
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(Color(avatarColors[index]), shape = CircleShape)
+                                    .border(
+                                        width = if (isSelected) 3.dp else 1.dp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.LightGray.copy(alpha = 0.5f),
+                                        shape = CircleShape
+                                    )
+                                    .clickable { avatarColorIndex = index }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    Button(
+                        onClick = {
+                            if (nameInput.isNotBlank()) {
+                                onSetProfile(nameInput.trim(), avatarColors[avatarColorIndex])
+                            }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.End)
+                            .testTag("save_profile_button")
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = "Save")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Save Profile", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // Module 2: System Appearance Theme Switcher Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                        shape = RoundedCornerShape(28.dp)
+                    ),
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(20.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                    shape = RoundedCornerShape(12.dp)
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = if (isDarkTheme) Icons.Default.Info else Icons.Default.Favorite,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column {
+                            Text(
+                                text = "DARK THEME",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = MaterialTheme.colorScheme.primary,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "Switch Day / Night Mode",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Switch(
+                        checked = isDarkTheme,
+                        onCheckedChange = { onSetTheme(it) },
+                        modifier = Modifier.testTag("theme_switcher_switch")
+                    )
+                }
+            }
+        }
+
+        // Module 3: Add Categories Bento block Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                        shape = RoundedCornerShape(28.dp)
+                    ),
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Text(
+                        text = "ADD EXPENSE CATEGORY",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.primary,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    OutlinedTextField(
+                        value = newCategoryName,
+                        onValueChange = {
+                            newCategoryName = it
+                            categoryError = ""
+                        },
+                        label = { Text("Category Name (e.g. Health, Bills)") },
+                        singleLine = true,
+                        isError = categoryError.isNotEmpty(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("category_name_input")
+                    )
+                    if (categoryError.isNotEmpty()) {
+                        Text(
+                            text = categoryError,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(start = 4.dp, top = 2.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Color Picker
+                    Text(
+                        text = "Choose Badge Color",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(categoryColors.size) { index ->
+                            val isSelected = index == categoryColorIndex
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .background(categoryColors[index], shape = CircleShape)
+                                    .border(
+                                        width = if (isSelected) 3.dp else 1.dp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.LightGray.copy(alpha = 0.5f),
+                                        shape = CircleShape
+                                    )
+                                    .clickable { categoryColorIndex = index }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Icon Picker
+                    Text(
+                        text = "Choose Badge Icon",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(categoryIcons.size) { index ->
+                            val isSelected = index == categoryIconIndex
+                            val iconPair = categoryIcons[index]
+                            Box(
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .background(
+                                        if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .border(
+                                        width = if (isSelected) 2.dp else 0.dp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                        shape = RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable { categoryIconIndex = index },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = iconPair.first,
+                                    contentDescription = iconPair.second,
+                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Button(
+                        onClick = {
+                            val nameText = newCategoryName.trim()
+                            if (nameText.isBlank()) {
+                                categoryError = "Category name cannot be empty"
+                            } else if (categories.any { it.name.equals(nameText, ignoreCase = true) }) {
+                                categoryError = "Category already exists"
+                            } else {
+                                onAddCategory(
+                                    nameText,
+                                    categoryColors[categoryColorIndex],
+                                    categoryIcons[categoryIconIndex].first
+                                )
+                                newCategoryName = ""
+                                categoryError = ""
+                            }
+                        },
+                        modifier = Modifier
+                            .align(Alignment.End)
+                            .testTag("add_category_button")
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Add")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Add Category", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+
+        // Module 4: Current Categories List with Edit Capabilities
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(
+                        BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                        shape = RoundedCornerShape(28.dp)
+                    ),
+                shape = RoundedCornerShape(28.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(20.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "AVAILABLE CATEGORIES",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "(Tap row to Edit/Delete)",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        categories.forEach { cat ->
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = cat.color.copy(alpha = 0.08f),
+                                border = BorderStroke(1.dp, cat.color.copy(alpha = 0.2f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { editingCategory = cat }
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .background(cat.color, shape = CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = cat.icon,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(16.dp))
+                                    Text(
+                                        text = cat.name,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Edit Category",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
